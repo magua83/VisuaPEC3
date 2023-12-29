@@ -1,0 +1,273 @@
+---
+title: "Visualización de Datos PEC3"
+author: "Miguel Agua Rondon"
+date: "2023-12-29"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Creación de una visualización de datos storytelling (PEC3)
+
+## **Tweets etiquetados sobre sentimientos y emociones de la marca dell**
+
+**Acerca del conjunto de datos**
+
+El conjunto de datos csv contiene todas las menciones de Dell en Twitter durante los primeros tres trimestres de 2022 (del 1 de enero al 30 de septiembre) junto con el sentimiento y las emociones de cada tweet. Tiene alrededor de 25.000 tweets junto con fecha, marca de tiempo, nombre de usuario e ID del tweet, sentimiento, puntuación de sentimiento, emoción y puntuación de emoción.
+
+Los sentimientos y emociones se han clasificado utilizando 🤗 transformadores, consulte este cuaderno para obtener más información.
+
+Sentimientos: positivos, negativos y neutros Emociones: alegría, amor, optimismo, pesimismo, confianza, sorpresa, anticipación, tristeza, ira, asco y miedo.
+
+Los tweets se han eliminado utilizando la biblioteca "snscrape" que no requiere acceso a la API de Twitter. Puedes seguir este cuaderno para aprender más sobre cómo eliminar tweets usando "snscrape".
+
+Lo podemos encontrar en:
+
+<https://www.kaggle.com/datasets/ankitkumar2635/sentiment-and-emotions-of-tweets>
+
+Ahora empecemos a trabajar estos datos, lo primero que debemos hacer es cargar las librerias necesarias.
+
+```{r}
+# Importamos las librerías necesarios
+library(plotly)
+library(tidyverse)
+library(wordcloud)
+library(tm)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+conflict_prefer("lag", "dplyr")
+```
+
+## Importación de los datos
+
+Las variables que presenta el conjunto de datos son:
+
+-   **#:** Número del tweet
+
+-   **Datetime:** Fecha y hora en que se publicó el tweet
+
+-   **Tweet Id:** Identificación única del tweet
+
+-   **Text:** Contenido del tweet
+
+-   **Username:** Nombre de usuario del autor del tweet
+
+-   **sentiment:** Sentimiento expresado en el tweet
+
+-   **sentiment_score:** Porcentaje que representa el sentimiento del tweet
+
+-   **emotion:** Emoción expresada en el tweet
+
+-   **emotion_score:** Porcentaje que representa la intensidad de la emoción en el tweet
+
+```{r}
+# Importamos el conjunto de datos y vemos la estructura que tiene
+file_path <- "data/sentiment-emotion-tweets.csv"
+tweets_data <- read.csv(file_path)
+
+#Mostramos los 5 primeros registros.
+head(tweets_data,5)
+
+# Resumen del conjunto de datos
+summary(tweets_data)
+```
+
+## Limpieza de datos
+
+### Verificar tipos de datos y posibles valores faltantes
+
+```{r}
+# Verificamos el tipos de datos y posibles valores faltantes
+str(tweets_data)
+
+# Contamos valores faltantes por columna
+missing_values <- colSums(is.na(tweets_data))
+
+# Mostramos el número de valores faltantes por columna
+print(missing_values)
+```
+
+```{r}
+# Hemos encontrado un valor faltante, por tanto procedemos a eliminarlo
+tweets_data <- na.omit(tweets_data)
+
+```
+
+```{r}
+# Contar nombres de usuario únicos
+num_unique_usernames <- length(unique(tweets_data$Username))
+num_unique_text <- length(unique(tweets_data$Text))
+
+# Mostrar el resultado
+cat("Usuarios unicos:", num_unique_usernames)
+cat("\nTweets unicos:", nrow(tweets_data))
+
+```
+
+## Visualización: Distribución de Sentimientos y Emociones
+
+```{r}
+# Visualizar la distribución de sentimientos y emociones
+ggplot(tweets_data, aes(x = sentiment)) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Distribución de Sentimientos")
+
+ggplot(tweets_data, aes(x = emotion)) +
+  geom_bar(fill = "lightcoral") +
+  labs(title = "Distribución de Emociones")
+```
+
+En estos primeros gráficos lo primero que nos encontramos es que la mayoria de tweets son negativos, de enfado y disgusto, mientras que alegría o disfrute (joy) es el principal de los sentimientos positivos. Pero podemos ver un clara diferencia de sentimientos negativos e incluso neutro que no positivos que hagan referencia a la marca.
+
+## Visualización: WordCloud Tweets
+
+```{r}
+# Creamos un corpus de texto
+corpus <- Corpus(VectorSource(tweets_data$Text))
+
+# Realizamos el preprocesamiento de texto
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "DELL", "dell")) 
+corpus <- tm_map(corpus, stripWhitespace)
+
+# Creamos un documento de términos
+dtm <- TermDocumentMatrix(corpus)
+
+# Extraemos la matriz de términos
+terms <- as.matrix(dtm)
+
+# Calculamos la frecuencia de las palabras
+word_freqs <- sort(rowSums(terms), decreasing = TRUE)
+
+# Definimos una paleta de colores personalizada, hemos obtado por una con similitud a DELL
+custom_colors <- c("#0092CC", "#808080","#0072C6", "#4F4F4F", "#000000")  # Azul, gris oscuro, negro
+
+# Creamos la nube de palabras
+wordcloud(words = names(word_freqs), freq = word_freqs, min.freq = 5, max.words = 100, random.order = FALSE, scale = c(3, 0.5), colors = custom_colors )
+```
+
+```{r}
+# Filtramos solo los tweets con sentimiento negativo
+negative_tweets <- subset(tweets_data, sentiment == "negative")
+
+# Creamos un corpus de texto
+corpus_negative <- Corpus(VectorSource(negative_tweets$Text))
+
+# Realizamos el preprocesamiento de texto
+corpus_negative <- tm_map(corpus_negative, content_transformer(tolower))
+corpus_negative <- tm_map(corpus_negative, removePunctuation)
+corpus_negative <- tm_map(corpus_negative, removeNumbers)
+corpus_negative <- tm_map(corpus_negative, removeWords, c(stopwords("en"), "DELL", "dell")) 
+corpus_negative <- tm_map(corpus_negative, stripWhitespace)
+
+# Creamos un documento de términos
+dtm_negative <- TermDocumentMatrix(corpus_negative)
+
+# Extraemos la matriz de términos
+terms_negative <- as.matrix(dtm_negative)
+
+# Calculamos la frecuencia de las palabras
+word_freqs_negative <- sort(rowSums(terms_negative), decreasing = TRUE)
+
+# Definimos una paleta de colores personalizada
+negative_custom_colors <- c("red", "#808080", "#FF313A", "#4F4F4F", "#000000")  # Rojo, gris oscuro, rojo oscuro, gris oscuro, negro
+
+# Creamos la nube de palabras
+wordcloud(words = names(word_freqs_negative), freq = word_freqs_negative, min.freq = 5, max.words = 100, random.order = FALSE, scale = c(3, 0.5), colors = negative_custom_colors )
+```
+
+```{r}
+# Filtramos solo los tweets con sentimiento negativo
+positive_tweets <- subset(tweets_data, sentiment == "positive")
+
+# Creamos un corpus de texto
+corpus_positive <- Corpus(VectorSource(positive_tweets$Text))
+
+# Realizamos el preprocesamiento de texto
+corpus_positive <- tm_map(corpus_positive, content_transformer(tolower))
+corpus_positive <- tm_map(corpus_positive, removePunctuation)
+corpus_positive <- tm_map(corpus_positive, removeNumbers)
+corpus_positive <- tm_map(corpus_positive, removeWords, c(stopwords("en"), "DELL", "dell")) 
+corpus_positive <- tm_map(corpus_positive, stripWhitespace)
+
+# Creamos un documento de términos
+dtm_positive <- TermDocumentMatrix(corpus_positive)
+
+# Extraemos la matriz de términos
+terms_positive <- as.matrix(dtm_positive)
+
+# Calculamos la frecuencia de las palabras
+word_freqs_positive <- sort(rowSums(terms_positive), decreasing = TRUE)
+
+
+positive_custom_colors <- c("#116433", "#808080", "#006400", "#4F4F4F", "#000000")  
+
+# Creamos la nube de palabras
+
+wordcloud(words = names(word_freqs_positive), freq = word_freqs_positive, min.freq = 10, max.words = 100, random.order = FALSE, scale = c(3, 0.3), colors = positive_custom_colors)
+
+```
+
+En estos wordclouds si que vemos algunas palabras que se repiten en todas las categorias, general, negativa y o positiva, como es laptop, por lo que podria indicarnos que la mayoria de tweets hacen referencia a la gama de laptops.
+
+## Visualización: "Crecimiento del nº de contenidos en Netflix por año"
+
+```{r}
+# Crear un gráfico de barras para mostrar los 10 usuarios con más tweets
+top_users <- tweets_data %>%
+  group_by(Username) %>%
+  summarize(TotalTweets = n()) %>%
+  arrange(desc(TotalTweets)) %>%
+  head(10)
+
+# Crear un gráfico de barras horizontales para los 10 usuarios con más tweets
+ggplot(top_users, aes(x = TotalTweets, y = reorder(Username, TotalTweets))) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Top 10 Usuarios con Más Tweets", x = "Número de Tweets", y = "Usuario") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10))  # Ajustar el tamaño del texto en el eje y
+```
+
+```{r}
+# Filtramos los tweets de los 10 usuarios principales
+top_10_tweets <- tweets_data %>%
+  filter(Username %in% top_users$Username)
+
+
+# Creamos una columna "TotalTweets" con el número total de tweets por usuario
+top_10_tweets <- top_10_tweets %>%
+  group_by(Username) %>%
+  mutate(TotalTweets = n())
+
+# Convertimos la columna "sentiment" a factor
+top_10_tweets$sentiment <- factor(top_10_tweets$sentiment, levels = c("positive", "neutral", "negative"))
+
+# Organizamos top_10_tweets por el número total de tweets de mayor a menor
+top_10_tweets <- top_10_tweets[order(-top_10_tweets$TotalTweets), ]
+
+# Creamos un gráfico de barras apiladas para mostrar por sentimientos de los 10 usuarios con más tweets
+ggplot(top_10_tweets, aes(y = reorder(Username, TotalTweets), fill = sentiment)) +
+  geom_bar() +
+  labs(title = "Sentimientos de los 10 Usuarios con Más Tweets", x = "Número de Tweets", y = "Usuario", fill = "Sentimiento") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10)) + # Ajustar el tamaño del texto en el eje y
+  scale_fill_manual(values = c("positive" = "green", "neutral" = "grey", "negative" = "red"))
+
+```
+
+Y en este ultimo punto, el mayor twittero acerca de la marca no habla ni bien ni mal, es bastante neutral, pero sin embargo el segundo habla de forma positiva y no es hasta la 7ª persona con mas tweets que habla mayormente mal de la marca y comenta cosas positivas tambien de la misma.
+
+Con estos datos hemos realizado una infografia:\
+<https://infogram.com/pec3_visualizacion-de-datos-1h984wo9r85jd6p?live>
